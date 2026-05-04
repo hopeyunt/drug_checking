@@ -1,0 +1,69 @@
+{
+  "features": [
+    "class_a_idx",
+    "class_b_idx",
+    "cyp_inhibitor",
+    "cyp_inducer",
+    "qt_risk",
+    "bleeding_risk",
+    "renal_risk",
+    "same_class"
+  ],
+  "drug_classes": [
+    "ACE_inhibitor",
+    "ARB",
+    "beta_blocker",
+    "calcium_channel_blocker",
+    "diuretic_thiazide",
+    "diuretic_loop",
+    "statin",
+    "anticoagulant_warfarin",
+    "anticoagulant_noac",
+    "antiplatelet",
+    "NSAID",
+    "opioid",
+    "benzo",
+    "SSRI",
+    "SNRI",
+    "TCA",
+    "antipsychotic_typical",
+    "antipsychotic_atypical",
+    "antibiotic_fluoroquinolone",
+    "antibiotic_macrolide",
+    "antibiotic_aminoglycoside",
+    "antifungal_azole",
+    "antiviral_HIV",
+    "metformin",
+    "sulfonylurea",
+    "insulin",
+    "thyroid_hormone",
+    "digoxin",
+    "PPI",
+    "H2_blocker",
+    "corticosteroid",
+    "immunosuppressant",
+    "antiepileptic_CYP_inducer",
+    "antiepileptic_CYP_inhibitor"
+  ],
+  "severity_labels": {
+    "0": "none",
+    "1": "mild",
+    "2": "moderate",
+    "3": "severe",
+    "4": "contraindicated"
+  },
+  "severity_descriptions": {
+    "0": "Клинически значимого взаимодействия не выявлено.",
+    "1": "Лёгкое взаимодействие. Мониторинг не требуется, коррекция дозы маловероятна.",
+    "2": "Умеренное взаимодействие. Рекомендуется мониторинг состояния пациента.",
+    "3": "Серьёзное взаимодействие. Требуется коррекция доз или замена препарата.",
+    "4": "Противопоказанная комбинация. Совместный приём недопустим."
+  },
+  "severity_recommendations": {
+    "0": "Продолжайте приём по назначению врача.",
+    "1": "Периодически контролируйте самочувствие.",
+    "2": "Проконсультируйтесь с врачом. Возможна коррекция дозы.",
+    "3": "Срочно обратитесь к врачу для пересмотра терапии.",
+    "4": "Немедленно обратитесь к врачу! Эта комбинация опасна для жизни."
+  }
+}
