@@ -1,6 +1,9 @@
+import json
+import os
 import pytest
 import numpy as np
-from unittest.mock import MagicMock, patch
+from decimal import Decimal
+from unittest.mock import MagicMock, patch, mock_open
 
 
 MOCK_META = {
@@ -214,3 +217,76 @@ def test_recalculate_loyalty_db_error_triggers_rollback():
 
     mock_db.rollback.assert_called_once()
     mock_db.close.assert_called_once()
+
+
+# ─────────────────── _load_model ───────────────────
+
+def test_load_model_loads_joblib_and_meta():
+    import app.tasks.interaction_tasks as tasks_module
+    tasks_module._model = None
+    tasks_module._meta = None
+
+    fake_model = MagicMock()
+    fake_meta = {"drug_classes": ["NSAID"], "severity_labels": {"0": "none"}}
+
+    with patch("app.tasks.interaction_tasks.joblib.load", return_value=fake_model) as mock_load, \
+         patch("os.path.exists", return_value=True), \
+         patch("builtins.open", mock_open(read_data=json.dumps(fake_meta))):
+        model, meta = tasks_module._load_model()
+
+    assert model is fake_model
+    assert meta["drug_classes"] == ["NSAID"]
+    mock_load.assert_called_once()
+
+    # повторный вызов не перечитывает файл
+    with patch("app.tasks.interaction_tasks.joblib.load") as mock_load2:
+        model2, _ = tasks_module._load_model()
+    mock_load2.assert_not_called()
+    assert model2 is fake_model
+
+
+def test_load_model_no_meta_file():
+    import app.tasks.interaction_tasks as tasks_module
+    tasks_module._model = None
+    tasks_module._meta = None
+
+    fake_model = MagicMock()
+    with patch("app.tasks.interaction_tasks.joblib.load", return_value=fake_model), \
+         patch("os.path.exists", return_value=False):
+        model, meta = tasks_module._load_model()
+
+    assert model is fake_model
+    assert meta is None
+
+
+# ─────────────────── billing_service unit ───────────────────
+
+def test_sync_deduct_credits_success():
+    from app.services.billing_service import sync_deduct_credits
+
+    mock_user = MagicMock()
+    mock_user.balance = Decimal("100")
+    mock_user.monthly_checks = 5
+    mock_user.loyalty_level = "bronze"
+
+    mock_db = MagicMock()
+    mock_db.execute.return_value.scalar_one.return_value = mock_user
+
+    result = sync_deduct_credits(mock_db, user_id=1, check_id=1, cost=Decimal("5"), description="тест")
+
+    assert result == Decimal("95")
+    assert mock_user.balance == Decimal("95")
+    mock_db.flush.assert_called_once()
+
+
+def test_sync_deduct_credits_not_enough():
+    from app.services.billing_service import sync_deduct_credits
+
+    mock_user = MagicMock()
+    mock_user.balance = Decimal("3")
+
+    mock_db = MagicMock()
+    mock_db.execute.return_value.scalar_one.return_value = mock_user
+
+    with pytest.raises(ValueError, match="Недостаточно"):
+        sync_deduct_credits(mock_db, user_id=1, check_id=1, cost=Decimal("5"), description="тест")
