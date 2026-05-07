@@ -167,6 +167,14 @@ def _make_user(monthly_checks: int, current_level: str):
     return user
 
 
+def _mock_recalculate(db, monthly_checks: int) -> str:
+    if monthly_checks >= 200:
+        return "gold"
+    if monthly_checks >= 50:
+        return "silver"
+    return "bronze"
+
+
 def test_recalculate_loyalty_upgrades_users():
     from app.tasks.loyalty_tasks import recalculate_all_loyalty_levels
 
@@ -179,7 +187,8 @@ def test_recalculate_loyalty_upgrades_users():
     mock_db.execute.return_value.scalars.return_value.all.return_value = users
 
     with patch("app.tasks.loyalty_tasks.get_sync_db", return_value=iter([mock_db])):
-        result = recalculate_all_loyalty_levels()
+        with patch("app.tasks.loyalty_tasks.recalculate_loyalty_sync", side_effect=_mock_recalculate):
+            result = recalculate_all_loyalty_levels()
 
     assert result["updated"] == 3
     assert result["status"] == "ok"
@@ -199,7 +208,8 @@ def test_recalculate_loyalty_no_users():
     mock_db.execute.return_value.scalars.return_value.all.return_value = []
 
     with patch("app.tasks.loyalty_tasks.get_sync_db", return_value=iter([mock_db])):
-        result = recalculate_all_loyalty_levels()
+        with patch("app.tasks.loyalty_tasks.recalculate_loyalty_sync", side_effect=_mock_recalculate):
+            result = recalculate_all_loyalty_levels()
 
     assert result["updated"] == 0
     assert result["status"] == "ok"
@@ -212,8 +222,9 @@ def test_recalculate_loyalty_db_error_triggers_rollback():
     mock_db.execute.side_effect = Exception("DB connection lost")
 
     with patch("app.tasks.loyalty_tasks.get_sync_db", return_value=iter([mock_db])):
-        with pytest.raises(Exception, match="DB connection lost"):
-            recalculate_all_loyalty_levels()
+        with patch("app.tasks.loyalty_tasks.recalculate_loyalty_sync", side_effect=_mock_recalculate):
+            with pytest.raises(Exception, match="DB connection lost"):
+                recalculate_all_loyalty_levels()
 
     mock_db.rollback.assert_called_once()
     mock_db.close.assert_called_once()
@@ -272,7 +283,8 @@ def test_sync_deduct_credits_success():
     mock_db = MagicMock()
     mock_db.execute.return_value.scalar_one.return_value = mock_user
 
-    result = sync_deduct_credits(mock_db, user_id=1, check_id=1, cost=Decimal("5"), description="тест")
+    with patch("app.services.billing_service.recalculate_loyalty_sync", return_value="bronze"):
+        result = sync_deduct_credits(mock_db, user_id=1, check_id=1, cost=Decimal("5"), description="тест")
 
     assert result == Decimal("95")
     assert mock_user.balance == Decimal("95")
@@ -288,5 +300,6 @@ def test_sync_deduct_credits_not_enough():
     mock_db = MagicMock()
     mock_db.execute.return_value.scalar_one.return_value = mock_user
 
-    with pytest.raises(ValueError, match="Недостаточно"):
-        sync_deduct_credits(mock_db, user_id=1, check_id=1, cost=Decimal("5"), description="тест")
+    with patch("app.services.billing_service.recalculate_loyalty_sync", return_value="bronze"):
+        with pytest.raises(ValueError, match="Недостаточно"):
+            sync_deduct_credits(mock_db, user_id=1, check_id=1, cost=Decimal("5"), description="тест")

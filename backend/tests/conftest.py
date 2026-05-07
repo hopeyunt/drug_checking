@@ -29,10 +29,30 @@ async def db_engine():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
+    await _seed_test_loyalty_configs(engine)
     yield engine
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
     await engine.dispose()
+
+
+async def _seed_test_loyalty_configs(engine):
+    from decimal import Decimal
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+    from app.models.user import LoyaltyConfig
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    configs = [
+        LoyaltyConfig(level="bronze", min_predictions=0,   discount_percent=Decimal("0")),
+        LoyaltyConfig(level="silver", min_predictions=50,  discount_percent=Decimal("5")),
+        LoyaltyConfig(level="gold",   min_predictions=200, discount_percent=Decimal("15")),
+    ]
+    async with session_factory() as session:
+        existing = await session.execute(select(LoyaltyConfig))
+        if not existing.scalars().first():
+            session.add_all(configs)
+            await session.commit()
 
 
 @pytest_asyncio.fixture
