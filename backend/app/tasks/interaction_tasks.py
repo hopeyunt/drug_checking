@@ -11,7 +11,7 @@ from app.core.database import get_sync_db
 from app.core.config import settings
 from app.models.interaction import InteractionCheck
 from app.models.user import User
-from app.services.billing_service import sync_deduct_credits, recalculate_loyalty
+from app.services.billing_service import sync_deduct_credits
 
 # Загружаем модель и метаданные один раз при старте воркера (кэш в памяти)
 _model = None
@@ -31,8 +31,35 @@ def _load_model():
     return _model, _meta
 
 
-def _drug_to_features(drug_name: str, meta: dict) -> dict:
-    drug_lower = drug_name.lower()
+def _resolve_to_inn(drug_name: str, db) -> str:
+    """
+    Ищет препарат в локальной таблице drugs (кэш ГРЛС).
+    Если нашёл — возвращает МНН для более точного keyword matching.
+    Если не нашёл — возвращает исходное название.
+    """
+    try:
+        from sqlalchemy import select as sync_select, func, or_
+        from app.models.drug import Drug
+
+        result = db.execute(
+            sync_select(Drug).where(
+                or_(
+                    func.lower(Drug.trade_name) == drug_name.lower(),
+                    func.lower(Drug.inn) == drug_name.lower(),
+                )
+            )
+        ).scalar_one_or_none()
+
+        if result and result.inn:
+            return result.inn
+    except Exception:
+        pass
+    return drug_name
+
+
+def _drug_to_features(drug_name: str, meta: dict, db=None) -> dict:
+    resolved = _resolve_to_inn(drug_name, db) if db else drug_name
+    drug_lower = resolved.lower()
     drug_classes = meta.get("drug_classes", [])
 
     class_keywords = {
@@ -95,9 +122,9 @@ def _drug_to_features(drug_name: str, meta: dict) -> dict:
     }
 
 
-def _predict_pair(model, meta: dict, drug_a: str, drug_b: str) -> dict:
-    fa = _drug_to_features(drug_a, meta)
-    fb = _drug_to_features(drug_b, meta)
+def _predict_pair(model, meta: dict, drug_a: str, drug_b: str, db=None) -> dict:
+    fa = _drug_to_features(drug_a, meta, db)
+    fb = _drug_to_features(drug_b, meta, db)
 
     features = np.array([[
         fa["class_idx"],
@@ -151,7 +178,7 @@ def run_interaction_check(self, check_id: int):
 
         interactions = []
         for drug_a, drug_b in combinations(drugs, 2):
-            result = _predict_pair(model, meta, drug_a, drug_b)
+            result = _predict_pair(model, meta, drug_a, drug_b, db)
             if result["severity"] != "none":
                 interactions.append(result)
 

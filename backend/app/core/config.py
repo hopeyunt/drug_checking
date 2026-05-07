@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     YOOKASSA_SECRET_KEY: str = ""
     YOOKASSA_RETURN_URL: str = "http://localhost:8501"
 
+    # CORS — разрешённые домены (через запятую)
+    # Пример: http://localhost:8501,https://drugcheck.ru
+    ALLOWED_ORIGINS: str = "http://localhost:8501,http://localhost:3000"
+
+    # Rate limiting
+    RATE_LIMIT_PER_MINUTE: int = 60
+
     class Config:
         env_file = ".env"
         extra = "ignore"
