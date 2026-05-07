@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     LOYALTY_SILVER_THRESHOLD: int = 50
     LOYALTY_GOLD_THRESHOLD: int = 200
 
+    # ЮКасса (платёжный шлюз)
+    YOOKASSA_SHOP_ID: str = ""
+    YOOKASSA_SECRET_KEY: str = ""
+    YOOKASSA_RETURN_URL: str = "http://localhost:8501"
+
     class Config:
         env_file = ".env"
         extra = "ignore"

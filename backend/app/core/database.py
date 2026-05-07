@@ -31,7 +31,7 @@ def get_sync_db():
 
 
 async def init_db():
-    from app.models import user, drug, interaction, transaction  # noqa: F401
+    from app.models import user, drug, interaction, transaction, payment  # noqa: F401
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     await _seed_loyalty_configs()

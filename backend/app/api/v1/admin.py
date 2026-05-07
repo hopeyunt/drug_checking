@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, text
+from sqlalchemy import select, func
 
 from app.core.database import get_db
-from app.models.user import User
+from app.models.user import User, LoyaltyConfig
 from app.models.interaction import InteractionCheck
 from app.models.transaction import Transaction
 from app.schemas.user import UserOut
+from app.schemas.billing import LoyaltyConfigOut, LoyaltyConfigUpdate
 from app.services.auth_service import require_admin
 
 router = APIRouter()
@@ -28,10 +29,8 @@ async def get_stats(
     total_spent = await db.execute(
         select(func.sum(Transaction.amount)).where(Transaction.type == "debit")
     )
-
     loyalty_dist = await db.execute(
-        select(User.loyalty_level, func.count(User.id))
-        .group_by(User.loyalty_level)
+        select(User.loyalty_level, func.count(User.id)).group_by(User.loyalty_level)
     )
 
     return {
@@ -55,3 +54,35 @@ async def list_users(
         select(User).order_by(User.created_at.desc()).limit(limit).offset(offset)
     )
     return result.scalars().all()
+
+
+@router.get("/loyalty", response_model=list[LoyaltyConfigOut])
+async def get_loyalty_configs(
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(LoyaltyConfig).order_by(LoyaltyConfig.min_predictions)
+    )
+    return result.scalars().all()
+
+
+@router.patch("/loyalty/{level}", response_model=LoyaltyConfigOut)
+async def update_loyalty_config(
+    level: str,
+    body: LoyaltyConfigUpdate,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(LoyaltyConfig).where(LoyaltyConfig.level == level)
+    )
+    cfg = result.scalar_one_or_none()
+    if not cfg:
+        raise HTTPException(status_code=404, detail=f"Уровень '{level}' не найден")
+
+    cfg.min_predictions = body.min_predictions
+    cfg.discount_percent = body.discount_percent
+    await db.commit()
+    await db.refresh(cfg)
+    return cfg

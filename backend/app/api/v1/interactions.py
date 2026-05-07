@@ -19,7 +19,7 @@ async def submit_check(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    cost = calculate_cost(user.loyalty_level)
+    cost = await calculate_cost(db, user.loyalty_level)
     if user.balance < cost:
         raise HTTPException(
             status_code=402,

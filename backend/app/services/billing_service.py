@@ -10,21 +10,96 @@ from app.models.user import User, LoyaltyConfig
 from app.models.transaction import Transaction
 
 
-LOYALTY_DISCOUNTS = {
-    "bronze": Decimal("0"),
-    "silver": Decimal("5"),
-    "gold":   Decimal("15"),
+# ─── Значения по умолчанию (используются если таблица loyalty_configs пуста) ──
+_DEFAULT_CONFIGS = {
+    "bronze": {"min_predictions": 0,   "discount_percent": Decimal("0")},
+    "silver": {"min_predictions": 50,  "discount_percent": Decimal("5")},
+    "gold":   {"min_predictions": 200, "discount_percent": Decimal("15")},
 }
 
 
-def get_discount_percent(loyalty_level: str) -> Decimal:
-    return LOYALTY_DISCOUNTS.get(loyalty_level, Decimal("0"))
+# ─── Чистые вычислительные функции (без зависимости от БД) ───────────────────
+
+def _compute_discount(configs: dict, level: str) -> Decimal:
+    cfg = configs.get(level)
+    if cfg is None:
+        return Decimal("0")
+    return cfg.discount_percent if hasattr(cfg, "discount_percent") else Decimal(str(cfg["discount_percent"]))
 
 
-def calculate_cost(loyalty_level: str) -> Decimal:
-    discount = get_discount_percent(loyalty_level)
+def _compute_cost(configs: dict, level: str) -> Decimal:
+    discount = _compute_discount(configs, level)
     return settings.CHECK_COST * (1 - discount / 100)
 
+
+def _compute_loyalty_level(configs: dict, monthly_checks: int) -> str:
+    items = list(configs.values())
+    sorted_levels = sorted(
+        items,
+        key=lambda c: c.min_predictions if hasattr(c, "min_predictions") else c["min_predictions"],
+        reverse=True,
+    )
+    for cfg in sorted_levels:
+        threshold = cfg.min_predictions if hasattr(cfg, "min_predictions") else cfg["min_predictions"]
+        if monthly_checks >= threshold:
+            return cfg.level if hasattr(cfg, "level") else [k for k, v in configs.items() if v is cfg][0]
+    return "bronze"
+
+
+# ─── Загрузка конфигов из БД ─────────────────────────────────────────────────
+
+async def get_loyalty_configs(db: AsyncSession) -> dict[str, LoyaltyConfig]:
+    result = await db.execute(select(LoyaltyConfig))
+    rows = result.scalars().all()
+    return {cfg.level: cfg for cfg in rows} if rows else {}
+
+
+def get_loyalty_configs_sync(db: Session) -> dict[str, LoyaltyConfig]:
+    result = db.execute(select(LoyaltyConfig))
+    rows = result.scalars().all()
+    return {cfg.level: cfg for cfg in rows} if rows else {}
+
+
+# ─── Публичные async-функции для FastAPI эндпоинтов ──────────────────────────
+
+async def get_discount_percent(db: AsyncSession, loyalty_level: str) -> Decimal:
+    configs = await get_loyalty_configs(db)
+    if not configs:
+        return Decimal(str(_DEFAULT_CONFIGS.get(loyalty_level, {}).get("discount_percent", 0)))
+    return _compute_discount(configs, loyalty_level)
+
+
+async def calculate_cost(db: AsyncSession, loyalty_level: str) -> Decimal:
+    configs = await get_loyalty_configs(db)
+    if not configs:
+        discount = Decimal(str(_DEFAULT_CONFIGS.get(loyalty_level, {}).get("discount_percent", 0)))
+        return settings.CHECK_COST * (1 - discount / 100)
+    return _compute_cost(configs, loyalty_level)
+
+
+async def recalculate_loyalty(db: AsyncSession, monthly_checks: int) -> str:
+    configs = await get_loyalty_configs(db)
+    if not configs:
+        return _recalculate_from_defaults(monthly_checks)
+    return _compute_loyalty_level(configs, monthly_checks)
+
+
+def recalculate_loyalty_sync(db: Session, monthly_checks: int) -> str:
+    configs = get_loyalty_configs_sync(db)
+    if not configs:
+        return _recalculate_from_defaults(monthly_checks)
+    return _compute_loyalty_level(configs, monthly_checks)
+
+
+def _recalculate_from_defaults(monthly_checks: int) -> str:
+    if monthly_checks >= settings.LOYALTY_GOLD_THRESHOLD:
+        return "gold"
+    if monthly_checks >= settings.LOYALTY_SILVER_THRESHOLD:
+        return "silver"
+    return "bronze"
+
+
+# ─── Операции с балансом ─────────────────────────────────────────────────────
 
 async def deduct_credits(
     db: AsyncSession,
@@ -86,15 +161,6 @@ async def add_credits(
     return new_balance
 
 
-def recalculate_loyalty(monthly_checks: int) -> str:
-    if monthly_checks >= settings.LOYALTY_GOLD_THRESHOLD:
-        return "gold"
-    if monthly_checks >= settings.LOYALTY_SILVER_THRESHOLD:
-        return "silver"
-    return "bronze"
-
-
-# Sync-версия для Celery worker
 def sync_deduct_credits(
     db: Session,
     user_id: int,
@@ -113,7 +179,7 @@ def sync_deduct_credits(
 
     user.balance -= cost
     user.monthly_checks += 1
-    user.loyalty_level = recalculate_loyalty(user.monthly_checks)
+    user.loyalty_level = recalculate_loyalty_sync(db, user.monthly_checks)
 
     transaction = Transaction(
         user_id=user_id,
