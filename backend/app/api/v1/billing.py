@@ -118,7 +118,7 @@ async def create_payment(
         payment_id=payment.id,
         yookassa_id=payment.yookassa_id,
         confirmation_url=payment.confirmation_url,
-        credits=credits,
+        credits=int(credits),
         amount_rub=body.amount_rub,
         test_mode=result.get("test_mode", False),
     )

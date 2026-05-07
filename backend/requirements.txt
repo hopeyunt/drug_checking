@@ -28,6 +28,9 @@ httpx==0.27.0
 # Rate limiting
 slowapi==0.1.9
 
+# Платёжный шлюз ЮКасса
+yookassa==3.1.0
+
 # Config
 pydantic-settings==2.2.1
 

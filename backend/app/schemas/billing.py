@@ -45,7 +45,7 @@ class PaymentCreateResponse(BaseModel):
     payment_id: int
     yookassa_id: str
     confirmation_url: str
-    credits: Decimal
+    credits: int
     amount_rub: int
     test_mode: bool = False
 
