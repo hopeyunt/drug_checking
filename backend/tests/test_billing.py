@@ -172,3 +172,107 @@ async def test_payment_create_test_mode(client: AsyncClient):
     assert data["test_mode"] is True
     assert data["credits"] == 150
     assert "confirmation_url" in data
+
+
+@pytest.mark.asyncio
+async def test_payment_stub_credits_user(client: AsyncClient):
+    """Stub-эндпоинт должен начислить кредиты и вернуть 200."""
+    import uuid
+    token = await _register_and_login(client, f"stub_{uuid.uuid4().hex[:6]}@test.com")
+
+    # Создаём платёж в тестовом режиме
+    create_resp = await client.post(
+        "/api/v1/billing/payment/create",
+        json={"amount_rub": 199},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert create_resp.status_code == 200
+    data = create_resp.json()
+    confirmation_url = data["confirmation_url"]
+
+    # Вызываем stub (подтверждение тестовой оплаты)
+    stub_resp = await client.get(confirmation_url)
+    assert stub_resp.status_code == 200
+    stub_data = stub_resp.json()
+    assert stub_data["credits"] == 50.0
+
+    # Повторный вызов — кредиты не дублируются
+    stub_resp2 = await client.get(confirmation_url)
+    assert stub_resp2.status_code == 200
+    assert "уже начислены" in stub_resp2.json()["message"]
+
+
+@pytest.mark.asyncio
+async def test_payment_stub_not_found(client: AsyncClient):
+    resp = await client.get("/api/v1/billing/payment/stub?id=nonexistent_id")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_payment_history(client: AsyncClient):
+    import uuid
+    token = await _register_and_login(client, f"hist2_{uuid.uuid4().hex[:6]}@test.com")
+    # Создаём платёж
+    await client.post(
+        "/api/v1/billing/payment/create",
+        json={"amount_rub": 1490},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    resp = await client.get("/api/v1/billing/payments", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200
+    payments = resp.json()
+    assert len(payments) >= 1
+    assert payments[0]["amount_rub"] == "1490.00" or float(payments[0]["amount_rub"]) == 1490
+
+
+# ─── Unit-тесты yookassa_service ──────────────────────────────────────────────
+
+def test_parse_webhook_success():
+    import json
+    from app.services.yookassa_service import parse_webhook
+
+    body = json.dumps({
+        "event": "payment.succeeded",
+        "object": {
+            "id": "pay_123",
+            "status": "succeeded",
+            "metadata": {"user_id": "42", "credits": "150"},
+        },
+    }).encode()
+
+    result = parse_webhook(body)
+    assert result is not None
+    assert result["event"] == "payment.succeeded"
+    assert result["yookassa_id"] == "pay_123"
+    assert result["user_id"] == 42
+    assert result["credits"] == 150
+
+
+def test_parse_webhook_wrong_event():
+    import json
+    from app.services.yookassa_service import parse_webhook
+
+    body = json.dumps({"event": "payment.canceled", "object": {}}).encode()
+    assert parse_webhook(body) is None
+
+
+def test_parse_webhook_invalid_json():
+    from app.services.yookassa_service import parse_webhook
+    assert parse_webhook(b"not json") is None
+
+
+def test_parse_webhook_missing_metadata():
+    import json
+    from app.services.yookassa_service import parse_webhook
+
+    body = json.dumps({
+        "event": "payment.succeeded",
+        "object": {"id": "pay_x", "status": "succeeded", "metadata": {}},
+    }).encode()
+    assert parse_webhook(body) is None
+
+
+def test_verify_webhook_no_keys():
+    from app.services.yookassa_service import verify_webhook_signature
+    # В тестовом режиме (без ключей) подпись всегда принимается
+    assert verify_webhook_signature(b"body", "any_signature") is True
