@@ -254,25 +254,42 @@ elif page == "💳 Биллинг":
     balance_data = api_get("/billing/balance", token) or {}
     st.metric("Текущий баланс", f"{balance_data.get('balance', 0)} кредитов")
 
-    st.subheader("Пополнить баланс")
-    packages = {"50 кредитов — 199 ₽": 50, "150 кредитов — 499 ₽": 150, "500 кредитов — 1490 ₽": 500}
+    st.subheader("Купить кредиты")
+    packages = {
+        "50 кредитов — 199 ₽":  199,
+        "150 кредитов — 499 ₽": 499,
+        "500 кредитов — 1490 ₽": 1490,
+    }
     selected = st.radio("Выберите пакет", list(packages.keys()))
-    amount = packages[selected]
+    amount_rub = packages[selected]
 
-    if st.button(f"Пополнить на {amount} кредитов", type="primary"):
-        resp = httpx.post(
-            f"{API_URL}/api/v1/billing/topup",
-            json={"amount": amount},
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=5,
-        )
-        if resp.status_code == 200:
-            st.success(f"Баланс пополнен на {amount} кредитов!")
-            st.rerun()
-        else:
-            st.error("Ошибка при пополнении")
-
-    st.caption("В демо-режиме оплата не требуется. В продакшне здесь будет интеграция с ЮKassa / Tinkoff.")
+    if st.button("Перейти к оплате", type="primary", use_container_width=True):
+        try:
+            resp = httpx.post(
+                f"{API_URL}/api/v1/billing/payment/create",
+                json={"amount_rub": amount_rub},
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("test_mode"):
+                    confirm_resp = httpx.get(data["confirmation_url"], timeout=5)
+                    if confirm_resp.status_code == 200:
+                        st.success(f"Баланс пополнен! +{data['credits']} кредитов (тестовый режим)")
+                        st.rerun()
+                    else:
+                        st.error("Ошибка при начислении кредитов")
+                else:
+                    st.markdown(
+                        f"[Оплатить {amount_rub} ₽ через ЮКасса]({data['confirmation_url']})",
+                        unsafe_allow_html=False,
+                    )
+                    st.info("После оплаты кредиты появятся на балансе автоматически.")
+            else:
+                st.error(f"Ошибка: {resp.text}")
+        except Exception as e:
+            st.error(f"Ошибка подключения: {e}")
 
 # ──────────────────────────────────────────────────────────
 # Администрирование
