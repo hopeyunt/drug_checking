@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     LOYALTY_SILVER_THRESHOLD: int = 50
     LOYALTY_GOLD_THRESHOLD: int = 200
 
+    BASE_URL: str = "http://localhost:8000"
+
     # ЮКасса (платёжный шлюз)
     YOOKASSA_SHOP_ID: str = ""
     YOOKASSA_SECRET_KEY: str = ""

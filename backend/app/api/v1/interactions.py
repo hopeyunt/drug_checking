@@ -20,10 +20,12 @@ async def submit_check(
     db: AsyncSession = Depends(get_db),
 ):
     cost = await calculate_cost(db, user.loyalty_level)
+
+    # проверяем что денег хватает
     if user.balance < cost:
         raise HTTPException(
             status_code=402,
-            detail=f"Недостаточно кредитов. Баланс: {user.balance}, стоимость проверки: {cost}",
+            detail="Недостаточно кредитов. Пополните баланс.",
         )
 
     check = InteractionCheck(

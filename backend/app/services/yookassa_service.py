@@ -20,7 +20,7 @@ async def create_payment(amount_rub: int, user_id: int, credits: int) -> dict:
         fake_id = f"test_{uuid.uuid4().hex}"
         return {
             "yookassa_id": fake_id,
-            "confirmation_url": f"http://localhost:8000/api/v1/billing/payment/stub?id={fake_id}",
+            "confirmation_url": f"{settings.BASE_URL}/api/v1/billing/payment/stub?id={fake_id}",
             "test_mode": True,
         }
 

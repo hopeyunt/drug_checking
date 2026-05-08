@@ -1,13 +1,8 @@
-"""
-DrugCheck Dashboard — аналитика для владельцев сервиса и администраторов.
-Доступен по http://localhost:8501
-"""
 import os
 import httpx
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 
@@ -20,7 +15,7 @@ st.set_page_config(
 # ──────────────────────────────────────────────────────────
 # Auth
 # ──────────────────────────────────────────────────────────
-def login(email: str, password: str) -> str | None:
+def login(email, password):
     try:
         resp = httpx.post(
             f"{API_URL}/api/v1/auth/login",
@@ -29,12 +24,13 @@ def login(email: str, password: str) -> str | None:
         )
         if resp.status_code == 200:
             return resp.json()["access_token"]
-    except Exception:
-        pass
+        # print("login failed:", resp.status_code, resp.text)
+    except Exception as e:
+        print("login error:", e)
     return None
 
 
-def api_get(path: str, token: str) -> dict | list | None:
+def api_get(path, token):
     try:
         resp = httpx.get(
             f"{API_URL}/api/v1{path}",
@@ -43,8 +39,8 @@ def api_get(path: str, token: str) -> dict | list | None:
         )
         if resp.status_code == 200:
             return resp.json()
-    except Exception:
-        pass
+    except Exception as e:
+        print("api_get error:", e)
     return None
 
 
@@ -59,7 +55,7 @@ if "user" not in st.session_state:
 # ──────────────────────────────────────────────────────────
 # Login / Register screen
 # ──────────────────────────────────────────────────────────
-def register(email: str, password: str, full_name: str) -> tuple[bool, str]:
+def register(email, password, full_name):
     try:
         resp = httpx.post(
             f"{API_URL}/api/v1/auth/register",
@@ -153,10 +149,15 @@ if page == "📊 Главная":
 
     st.divider()
 
-    loyalty_levels = {"bronze": 0, "silver": 50, "gold": 200}
+    # TODO: вынести пороги в константы
     current = balance_data.get("monthly_checks", 0)
     current_level = balance_data.get("loyalty_level", "bronze")
-    next_threshold = 200 if current_level == "silver" else (50 if current_level == "bronze" else None)
+    if current_level == "bronze":
+        next_threshold = 50
+    elif current_level == "silver":
+        next_threshold = 200
+    else:
+        next_threshold = None
 
     if next_threshold:
         progress = min(current / next_threshold, 1.0)
@@ -215,7 +216,7 @@ elif page == "💉 Проверка взаимодействий":
                     )
                     if resp.status_code == 202:
                         check = resp.json()
-                        check_id = check["check_id"]
+                        check_id = check["id"]
                         st.success(f"Проверка запущена (ID: {check_id}). Получаю результат...")
 
                         import time
@@ -226,7 +227,7 @@ elif page == "💉 Проверка взаимодействий":
                                 break
 
                         if result and result.get("status") == "completed":
-                            interactions = result.get("interactions") or []
+                            interactions = result.get("result") or []
                             found = len(interactions)
 
                             if found == 0:
@@ -234,16 +235,19 @@ elif page == "💉 Проверка взаимодействий":
                             else:
                                 st.warning(f"⚠️ Найдено {found} взаимодействий")
 
-                            severity_colors = {
-                                "contraindicated": "🔴",
-                                "severe":          "🟠",
-                                "moderate":        "🟡",
-                                "mild":            "🟢",
-                            }
-
                             for inter in interactions:
-                                icon = severity_colors.get(inter.get("severity", ""), "⚪")
-                                with st.expander(f"{icon} {inter['drug_a']} + {inter['drug_b']} — {inter.get('severity','').upper()}"):
+                                sev = inter.get("severity", "")
+                                if sev == "contraindicated":
+                                    icon = "🔴"
+                                elif sev == "severe":
+                                    icon = "🟠"
+                                elif sev == "moderate":
+                                    icon = "🟡"
+                                elif sev == "mild":
+                                    icon = "🟢"
+                                else:
+                                    icon = "⚪"
+                                with st.expander(f"{icon} {inter['drug_a']} + {inter['drug_b']} — {sev.upper()}"):
                                     st.write(f"**Описание:** {inter.get('description','')}")
                                     st.write(f"**Рекомендация:** {inter.get('recommendation','')}")
                                     st.progress(inter.get("severity_score", 0))

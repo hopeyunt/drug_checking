@@ -10,11 +10,11 @@ from app.models.user import User, LoyaltyConfig
 from app.models.transaction import Transaction
 
 
-# ─── Значения по умолчанию (используются если таблица loyalty_configs пуста) ──
+# TODO: потом брать из БД, пока хардкод
 _DEFAULT_CONFIGS = {
-    "bronze": {"min_predictions": 0,   "discount_percent": Decimal("0")},
-    "silver": {"min_predictions": 50,  "discount_percent": Decimal("5")},
-    "gold":   {"min_predictions": 200, "discount_percent": Decimal("15")},
+    "bronze": {"min_predictions": 0, "discount_percent": Decimal("0")},
+    "silver": {"min_predictions": 50, "discount_percent": Decimal("5")},
+    "gold": {"min_predictions": 200, "discount_percent": Decimal("15")},
 }
 
 
