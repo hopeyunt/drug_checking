@@ -57,25 +57,60 @@ if "user" not in st.session_state:
     st.session_state.user = None
 
 # ──────────────────────────────────────────────────────────
-# Login screen
+# Login / Register screen
 # ──────────────────────────────────────────────────────────
+def register(email: str, password: str, full_name: str) -> tuple[bool, str]:
+    try:
+        resp = httpx.post(
+            f"{API_URL}/api/v1/auth/register",
+            json={"email": email, "password": password, "full_name": full_name},
+            timeout=5,
+        )
+        if resp.status_code == 201:
+            return True, ""
+        return False, resp.json().get("detail", "Ошибка регистрации")
+    except Exception as e:
+        return False, str(e)
+
+
 if not st.session_state.token:
-    st.title("💊 DrugCheck — Вход")
+    st.title("💊 DrugCheck")
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        with st.form("login_form"):
-            email = st.text_input("Email", placeholder="admin@drugcheck.ru")
-            password = st.text_input("Пароль", type="password")
-            submitted = st.form_submit_button("Войти", use_container_width=True)
-            if submitted:
-                token = login(email, password)
-                if token:
-                    st.session_state.token = token
-                    user = api_get("/auth/me", token)
-                    st.session_state.user = user
-                    st.rerun()
-                else:
-                    st.error("Неверный email или пароль")
+        tab_login, tab_register = st.tabs(["Войти", "Регистрация"])
+
+        with tab_login:
+            with st.form("login_form"):
+                email = st.text_input("Email", placeholder="user@example.com", key="li_email")
+                password = st.text_input("Пароль", type="password", key="li_pass")
+                submitted = st.form_submit_button("Войти", use_container_width=True)
+                if submitted:
+                    token = login(email, password)
+                    if token:
+                        st.session_state.token = token
+                        user = api_get("/auth/me", token)
+                        st.session_state.user = user
+                        st.rerun()
+                    else:
+                        st.error("Неверный email или пароль")
+
+        with tab_register:
+            with st.form("register_form"):
+                reg_name = st.text_input("Имя", placeholder="Иван Иванов")
+                reg_email = st.text_input("Email", placeholder="user@example.com", key="reg_email")
+                reg_pass = st.text_input("Пароль", type="password", key="reg_pass")
+                reg_submitted = st.form_submit_button("Создать аккаунт", use_container_width=True, type="primary")
+                if reg_submitted:
+                    if not reg_name or not reg_email or not reg_pass:
+                        st.error("Заполните все поля")
+                    elif len(reg_pass) < 8:
+                        st.error("Пароль должен содержать минимум 8 символов")
+                    else:
+                        ok, err = register(reg_email, reg_pass, reg_name)
+                        if ok:
+                            st.success("Аккаунт создан! Войдите на вкладке «Войти».")
+                        else:
+                            st.error(err)
     st.stop()
 
 token = st.session_state.token
