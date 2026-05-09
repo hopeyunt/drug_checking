@@ -11,6 +11,8 @@ from app.core.database import get_sync_db
 from app.core.config import settings
 from app.models.interaction import InteractionCheck
 from app.models.user import User
+from app.models.patient import Patient  # noqa: F401 — нужен для SQLAlchemy relationship
+from app.models.payment import Payment  # noqa: F401
 from app.services.billing_service import sync_deduct_credits
 
 # Загружаем модель и метаданные один раз при старте воркера (кэш в памяти)

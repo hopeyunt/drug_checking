@@ -30,6 +30,7 @@ class User(Base):
 
     transactions = relationship("Transaction", back_populates="user", lazy="select")
     checks = relationship("InteractionCheck", back_populates="user", lazy="select")
+    patients = relationship("Patient", back_populates="user", lazy="select")
 
 
 class LoyaltyConfig(Base):

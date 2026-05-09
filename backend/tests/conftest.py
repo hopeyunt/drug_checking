@@ -2,17 +2,36 @@ import asyncio
 import os
 import pytest
 import pytest_asyncio
+from unittest.mock import MagicMock, patch, AsyncMock
 from httpx import AsyncClient, ASGITransport
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.pool import NullPool
 
 from app.main import app
 from app.core.database import Base, get_db
+import app.core.database as _db_module
 
 TEST_DB_URL = os.getenv(
     "TEST_DATABASE_URL",
-    "postgresql+asyncpg://postgres:changeme_in_prod@postgres:5432/drugcheck_test",
+    "postgresql+asyncpg://postgres:changeme_in_prod@localhost:5432/drugcheck_test",
 )
+
+
+async def _ensure_test_db_exists(db_url: str) -> None:
+    db_name = db_url.rsplit("/", 1)[-1]
+    admin_url = db_url.rsplit("/", 1)[0] + "/postgres"
+    engine = create_async_engine(admin_url, isolation_level="AUTOCOMMIT", poolclass=NullPool)
+    try:
+        async with engine.connect() as conn:
+            result = await conn.execute(
+                text("SELECT 1 FROM pg_database WHERE datname = :name"),
+                {"name": db_name},
+            )
+            if not result.scalar():
+                await conn.execute(text(f'CREATE DATABASE "{db_name}"'))
+    finally:
+        await engine.dispose()
 
 
 @pytest.fixture(scope="session")
@@ -25,6 +44,7 @@ def event_loop():
 
 @pytest_asyncio.fixture(scope="session")
 async def db_engine():
+    await _ensure_test_db_exists(TEST_DB_URL)
     engine = create_async_engine(TEST_DB_URL, echo=False, poolclass=NullPool)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
@@ -74,6 +94,28 @@ async def db(db_engine):
     session_factory = async_sessionmaker(db_engine, expire_on_commit=False)
     async with session_factory() as session:
         yield session
+
+
+@pytest.fixture(autouse=True)
+def mock_celery_task():
+    """Мок Celery — тесты не требуют запущенного Redis-брокера."""
+    mock_result = MagicMock()
+    mock_result.id = "mock-task-id-for-tests"
+    with patch(
+        "app.tasks.interaction_tasks.run_interaction_check.apply_async",
+        return_value=mock_result,
+    ):
+        yield
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def redirect_app_session_local(db_engine):
+    """Перенаправляет AsyncSessionLocal (health-check, sync-задачи) на тестовую БД."""
+    test_factory = async_sessionmaker(db_engine, expire_on_commit=False)
+    original = _db_module.AsyncSessionLocal
+    _db_module.AsyncSessionLocal = test_factory
+    yield
+    _db_module.AsyncSessionLocal = original
 
 
 @pytest.fixture
