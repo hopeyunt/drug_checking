@@ -107,20 +107,25 @@ def _drug_to_features(drug_name: str, meta: dict, db=None) -> dict:
                 class_idx = drug_classes.index(cls)
             break
 
-    cyp_inhibitor = int(detected_class in ["antifungal_azole", "antibiotic_macrolide", "antiepileptic_CYP_inhibitor"])
-    cyp_inducer   = int(detected_class in ["antiepileptic_CYP_inducer"])
-    qt_risk       = int(detected_class in ["TCA", "antipsychotic_typical", "antibiotic_fluoroquinolone"])
-    bleeding_risk = int(detected_class in ["anticoagulant_warfarin", "anticoagulant_noac", "NSAID", "antiplatelet"])
-    renal_risk    = int(detected_class in ["antibiotic_aminoglycoside", "NSAID"])
+    cyp_inhibitor  = int(detected_class in ["antifungal_azole", "antibiotic_macrolide", "antiepileptic_CYP_inhibitor", "antiviral_HIV"])
+    cyp_inducer    = int(detected_class in ["antiepileptic_CYP_inducer"])
+    qt_risk        = int(detected_class in ["TCA", "antipsychotic_typical", "antibiotic_fluoroquinolone"])
+    bleeding_risk  = int(detected_class in ["anticoagulant_warfarin", "anticoagulant_noac", "NSAID", "antiplatelet"])
+    renal_risk     = int(detected_class in ["antibiotic_aminoglycoside", "NSAID"])
+    serotonin_risk = int(detected_class in ["SSRI", "SNRI", "TCA", "opioid"])
+    narrow_index   = int(detected_class in ["anticoagulant_warfarin", "digoxin", "immunosuppressant",
+                                            "antiepileptic_CYP_inducer", "antiepileptic_CYP_inhibitor"])
 
     return {
-        "class_idx":     class_idx,
-        "drug_class":    detected_class,
-        "cyp_inhibitor": cyp_inhibitor,
-        "cyp_inducer":   cyp_inducer,
-        "qt_risk":       qt_risk,
-        "bleeding_risk": bleeding_risk,
-        "renal_risk":    renal_risk,
+        "class_idx":      class_idx,
+        "drug_class":     detected_class,
+        "cyp_inhibitor":  cyp_inhibitor,
+        "cyp_inducer":    cyp_inducer,
+        "qt_risk":        qt_risk,
+        "bleeding_risk":  bleeding_risk,
+        "renal_risk":     renal_risk,
+        "serotonin_risk": serotonin_risk,
+        "narrow_index":   narrow_index,
     }
 
 
@@ -131,11 +136,13 @@ def _predict_pair(model, meta: dict, drug_a: str, drug_b: str, db=None) -> dict:
     features = np.array([[
         fa["class_idx"],
         fb["class_idx"],
-        max(fa["cyp_inhibitor"], fb["cyp_inhibitor"]),
-        max(fa["cyp_inducer"], fb["cyp_inducer"]),
-        max(fa["qt_risk"], fb["qt_risk"]),
-        max(fa["bleeding_risk"], fb["bleeding_risk"]),
-        max(fa["renal_risk"], fb["renal_risk"]),
+        max(fa["cyp_inhibitor"],  fb["cyp_inhibitor"]),
+        max(fa["cyp_inducer"],    fb["cyp_inducer"]),
+        max(fa["qt_risk"],        fb["qt_risk"]),
+        max(fa["bleeding_risk"],  fb["bleeding_risk"]),
+        max(fa["renal_risk"],     fb["renal_risk"]),
+        int(fa["serotonin_risk"] and fb["serotonin_risk"]),
+        max(fa["narrow_index"],   fb["narrow_index"]),
         int(fa["drug_class"] == fb["drug_class"] and fa["drug_class"] != "unknown"),
     ]])
 

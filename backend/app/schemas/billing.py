@@ -1,3 +1,4 @@
+from typing import Optional, List
 from decimal import Decimal
 from datetime import datetime
 from pydantic import BaseModel, Field
@@ -8,7 +9,7 @@ class TransactionOut(BaseModel):
     type: str
     amount: Decimal
     balance_after: Decimal
-    description: str | None
+    description: Optional[str]
     created_at: datetime
 
     model_config = {"from_attributes": True}

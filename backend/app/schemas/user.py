@@ -1,3 +1,4 @@
+from typing import Optional, List
 from decimal import Decimal
 from datetime import datetime
 from pydantic import BaseModel, EmailStr
@@ -6,7 +7,7 @@ from pydantic import BaseModel, EmailStr
 class UserOut(BaseModel):
     id: int
     email: EmailStr
-    full_name: str | None
+    full_name: Optional[str]
     balance: Decimal
     loyalty_level: str
     monthly_checks: int

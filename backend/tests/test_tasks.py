@@ -146,7 +146,7 @@ def test_predict_pair_same_class_flag():
     model = _make_model(0, [0.9, 0.05, 0.03, 0.01, 0.01])
     _predict_pair(model, MOCK_META, "варфарин", "варфарин")
     features = model.predict.call_args[0][0]
-    assert features[0][7] == 1  # same_class = 1
+    assert features[0][9] == 1  # same_class на позиции 9 (после serotonin/narrow признаков)
 
 
 def test_predict_pair_different_class_flag():
@@ -154,7 +154,7 @@ def test_predict_pair_different_class_flag():
     model = _make_model(2, [0.05, 0.1, 0.7, 0.1, 0.05])
     _predict_pair(model, MOCK_META, "варфарин", "ибупрофен")
     features = model.predict.call_args[0][0]
-    assert features[0][7] == 0  # different classes
+    assert features[0][9] == 0  # different classes
 
 
 # ─────────────────── loyalty_tasks ───────────────────

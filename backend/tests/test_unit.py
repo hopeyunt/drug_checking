@@ -1,3 +1,4 @@
+from typing import Optional
 """
 Юнит-тесты для чистых функций (без БД и Redis).
 Покрывают: security, billing_service (pure), interaction_tasks (pure).
@@ -161,7 +162,7 @@ _MOCK_META = {
 }
 
 
-def _make_mock_db(inn: str | None = None):
+def _make_mock_db(inn: Optional[str] = None):
     db = MagicMock()
     if inn is not None:
         drug = MagicMock()

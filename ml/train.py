@@ -237,11 +237,20 @@ def _load_interactions() -> dict[tuple[str, str], int]:
 
 def _class_features(cls: str) -> dict:
     return {
-        "cyp_inhibitor": int("azole" in cls or "macrolide" in cls or "CYP_inhibitor" in cls or "antiviral_HIV" == cls),
-        "cyp_inducer":   int("CYP_inducer" in cls),
-        "qt_risk":       int("TCA" in cls or "antipsychotic_typical" == cls or "fluoroquinolone" in cls),
-        "bleeding_risk": int("anticoagulant" in cls or "NSAID" == cls or "antiplatelet" == cls),
-        "renal_risk":    int("aminoglycoside" in cls or "NSAID" == cls),
+        # Ферментные взаимодействия CYP450
+        "cyp_inhibitor":    int("azole" in cls or "macrolide" in cls or "CYP_inhibitor" in cls or cls == "antiviral_HIV"),
+        "cyp_inducer":      int("CYP_inducer" in cls),
+        # Кардиотоксичность
+        "qt_risk":          int("TCA" in cls or cls == "antipsychotic_typical" or "fluoroquinolone" in cls),
+        # Риск кровотечения
+        "bleeding_risk":    int("anticoagulant" in cls or cls == "NSAID" or cls == "antiplatelet"),
+        # Нефротоксичность
+        "renal_risk":       int("aminoglycoside" in cls or cls == "NSAID"),
+        # Серотониновый синдром: СИОЗС + СИОЗСН + ТЦА + опиоиды (трамадол)
+        "serotonin_risk":   int(cls in ("SSRI", "SNRI", "TCA", "opioid")),
+        # Узкий терапевтический индекс — малейшее изменение концентрации опасно
+        "narrow_index":     int(cls in ("anticoagulant_warfarin", "digoxin", "immunosuppressant",
+                                        "antiepileptic_CYP_inducer", "antiepileptic_CYP_inhibitor")),
     }
 
 
@@ -249,15 +258,19 @@ def _make_record(cls_a: str, cls_b: str, severity: int) -> dict:
     fa = _class_features(cls_a)
     fb = _class_features(cls_b)
     return {
-        "class_a_idx":   DRUG_CLASSES.index(cls_a) if cls_a in DRUG_CLASSES else 0,
-        "class_b_idx":   DRUG_CLASSES.index(cls_b) if cls_b in DRUG_CLASSES else 0,
-        "cyp_inhibitor": max(fa["cyp_inhibitor"], fb["cyp_inhibitor"]),
-        "cyp_inducer":   max(fa["cyp_inducer"],   fb["cyp_inducer"]),
-        "qt_risk":       max(fa["qt_risk"],        fb["qt_risk"]),
-        "bleeding_risk": max(fa["bleeding_risk"],  fb["bleeding_risk"]),
-        "renal_risk":    max(fa["renal_risk"],     fb["renal_risk"]),
-        "same_class":    int(cls_a.split("_")[0] == cls_b.split("_")[0]),
-        "severity":      severity,
+        "class_a_idx":    DRUG_CLASSES.index(cls_a) if cls_a in DRUG_CLASSES else 0,
+        "class_b_idx":    DRUG_CLASSES.index(cls_b) if cls_b in DRUG_CLASSES else 0,
+        "cyp_inhibitor":  max(fa["cyp_inhibitor"],  fb["cyp_inhibitor"]),
+        "cyp_inducer":    max(fa["cyp_inducer"],    fb["cyp_inducer"]),
+        "qt_risk":        max(fa["qt_risk"],         fb["qt_risk"]),
+        "bleeding_risk":  max(fa["bleeding_risk"],  fb["bleeding_risk"]),
+        "renal_risk":     max(fa["renal_risk"],      fb["renal_risk"]),
+        # Оба препарата серотонинергические → аддитивный риск серотонинового синдрома
+        "both_serotonin": int(fa["serotonin_risk"] and fb["serotonin_risk"]),
+        # Хотя бы один с узким индексом → любое взаимодействие опаснее
+        "any_narrow":     max(fa["narrow_index"],   fb["narrow_index"]),
+        "same_class":     int(cls_a.split("_")[0] == cls_b.split("_")[0]),
+        "severity":       severity,
     }
 
 
@@ -327,13 +340,21 @@ def train():
         print(f"  {idx} ({SEVERITY_LABELS[idx]:>15}): {count}")
 
     feature_cols = [
-        "class_a_idx", "class_b_idx", "cyp_inhibitor",
-        "cyp_inducer", "qt_risk", "bleeding_risk", "renal_risk", "same_class",
+        "class_a_idx", "class_b_idx",
+        "cyp_inhibitor", "cyp_inducer",
+        "qt_risk", "bleeding_risk", "renal_risk",
+        "both_serotonin", "any_narrow",
+        "same_class",
     ]
     X_train = train_df[feature_cols].values
     y_train = train_df["severity"].values
     X_test  = test_df[feature_cols].values
     y_test  = test_df["severity"].values
+
+    # Веса классов: редкие классы (contraindicated, moderate) получают больший вес
+    # чтобы модель не игнорировала их в пользу частых
+    from sklearn.utils.class_weight import compute_sample_weight
+    sample_weights = compute_sample_weight("balanced", y_train)
 
     model = Pipeline([
         ("scaler", StandardScaler()),
@@ -346,7 +367,7 @@ def train():
     ])
 
     print("\nОбучаю модель...")
-    model.fit(X_train, y_train)
+    model.fit(X_train, y_train, clf__sample_weight=sample_weights)
 
     cv_scores = cross_val_score(model, X_train, y_train, cv=5, scoring="accuracy")
     print(f"CV accuracy (train, 5-fold): {cv_scores.mean():.3f} ± {cv_scores.std():.3f}")

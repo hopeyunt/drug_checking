@@ -1,3 +1,5 @@
+from typing import Optional
+
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
@@ -21,7 +23,7 @@ async def search_drugs_local(db: AsyncSession, query: str, limit: int = 10) -> l
     return result.scalars().all()
 
 
-async def get_drug_by_name(db: AsyncSession, name: str) -> Drug | None:
+async def get_drug_by_name(db: AsyncSession, name: str) -> Optional[Drug]:
     result = await db.execute(
         select(Drug).where(
             or_(
@@ -33,7 +35,7 @@ async def get_drug_by_name(db: AsyncSession, name: str) -> Drug | None:
     return result.scalar_one_or_none()
 
 
-async def fetch_from_grls(trade_name: str) -> dict | None:
+async def fetch_from_grls(trade_name: str) -> Optional[dict]:
     params = {
         "RegistrationNumber": "",
         "MnnName": "",
@@ -64,7 +66,7 @@ async def fetch_from_grls(trade_name: str) -> dict | None:
         return None
 
 
-async def resolve_drug(db: AsyncSession, name: str) -> Drug | None:
+async def resolve_drug(db: AsyncSession, name: str) -> Optional[Drug]:
     drug = await get_drug_by_name(db, name)
     if drug:
         return drug

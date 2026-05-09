@@ -65,7 +65,7 @@ def verify_webhook_signature(body: bytes, signature_header: str) -> bool:
     return hmac.compare_digest(expected, signature_header)
 
 
-def parse_webhook(body: bytes) -> dict | None:
+def parse_webhook(body: bytes) -> dict:
     try:
         data = json.loads(body)
     except json.JSONDecodeError:

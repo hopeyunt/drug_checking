@@ -1,3 +1,4 @@
+from typing import Optional, List
 from decimal import Decimal
 from datetime import datetime
 from pydantic import BaseModel, field_validator
@@ -34,13 +35,13 @@ class InteractionResult(BaseModel):
 class CheckResponse(BaseModel):
     id: int
     status: str
-    task_id: str | None = None
-    cost: Decimal | None = None
+    task_id: Optional[str] = None
+    cost: Optional[Decimal] = None
     drugs_input: list[str]
-    result: list[InteractionResult] | None = None
+    result: Optional[List[InteractionResult]] = None
     interactions_found: int = 0
     created_at: datetime
-    completed_at: datetime | None = None
+    completed_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 
@@ -49,7 +50,7 @@ class DrugSearchResult(BaseModel):
     id: int
     trade_name: str
     inn: str
-    drug_class: str | None
-    atc_code: str | None
+    drug_class: Optional[str]
+    atc_code: Optional[str]
 
     model_config = {"from_attributes": True}

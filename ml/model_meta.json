@@ -7,6 +7,8 @@
     "qt_risk",
     "bleeding_risk",
     "renal_risk",
+    "both_serotonin",
+    "any_narrow",
     "same_class"
   ],
   "drug_classes": [
