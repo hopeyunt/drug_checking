@@ -1,8 +1,7 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -83,26 +82,3 @@ async def health():
     )
 
 
-def custom_openapi():
-    if app.openapi_schema:
-        return app.openapi_schema
-    schema = get_openapi(
-        title=app.title,
-        version=app.version,
-        description=app.description,
-        routes=app.routes,
-    )
-    schema.setdefault("components", {}).setdefault("securitySchemes", {})["BearerAuth"] = {
-        "type": "http",
-        "scheme": "bearer",
-        "bearerFormat": "JWT",
-    }
-    for path in schema.get("paths", {}).values():
-        for operation in path.values():
-            if isinstance(operation, dict) and "security" in operation:
-                operation["security"].append({"BearerAuth": []})
-    app.openapi_schema = schema
-    return schema
-
-
-app.openapi = custom_openapi
