@@ -1,11 +1,9 @@
 """
 Обучение модели классификации тяжести лекарственных взаимодействий.
 
-Методология: датасет сформирован на основе клинически валидированных правил
-взаимодействия фармакологических классов согласно:
-  - Инструкциям по применению препаратов ГРЛС (grls.rosminzdrav.ru)
-  - Российским клиническим рекомендациям МЗ РФ
-  - Установленным фармакокинетическим механизмам (CYP450, P-гп, QT-удлинение)
+Источник данных: официальные FDA-инструкции по применению (openFDA API).
+Собираются скриптом collect_real_data.py → ml/data/class_pairs_real.csv.
+Если файл отсутствует — используются встроенные клинические правила как запасной вариант.
 
 Классы тяжести:
   0 — none          нет клинически значимого взаимодействия
@@ -16,8 +14,10 @@
 
 Запуск: python ml/train.py
 """
+import csv
 import json
 import os
+from pathlib import Path
 
 import joblib
 import numpy as np
@@ -212,6 +212,29 @@ SAFE_COMBINATIONS: list[tuple[str, str]] = [
 ]
 
 
+def _load_interactions() -> dict[tuple[str, str], int]:
+    """
+    Загружает пары взаимодействий из реальных данных (FDA labels через openFDA API).
+    Если файл не найден — возвращает встроенные клинические правила.
+    """
+    csv_path = Path(__file__).parent / "data" / "class_pairs_real.csv"
+    if not csv_path.exists():
+        print("Файл данных не найден → используются встроенные клинические правила")
+        return KNOWN_INTERACTIONS
+
+    interactions: dict[tuple[str, str], int] = {}
+    with open(csv_path, encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            key = (row["class_a"], row["class_b"])
+            sev = int(row["severity"])
+            # При конфликте берём максимальную тяжесть
+            if key not in interactions or interactions[key] < sev:
+                interactions[key] = sev
+
+    print(f"Загружено {len(interactions)} пар из FDA labels (openFDA API)")
+    return interactions
+
+
 def _class_features(cls: str) -> dict:
     return {
         "cyp_inhibitor": int("azole" in cls or "macrolide" in cls or "CYP_inhibitor" in cls or "antiviral_HIV" == cls),
@@ -245,10 +268,12 @@ def generate_dataset() -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     rng = np.random.default_rng(42)
 
-    # Собираем все уникальные пары с их severity
+    # Загружаем взаимодействия: реальные данные FDA или встроенные правила
+    interactions = _load_interactions()
+
     all_pairs: list[tuple[str, str, int]] = []
 
-    for (cls_a, cls_b), severity in KNOWN_INTERACTIONS.items():
+    for (cls_a, cls_b), severity in interactions.items():
         all_pairs.append((cls_a, cls_b, severity))
         all_pairs.append((cls_b, cls_a, severity))
 
