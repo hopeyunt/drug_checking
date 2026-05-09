@@ -21,11 +21,9 @@ _meta = None
 
 
 def _load_model():
-    # TODO: переделать на async когда будет время
     global _model, _meta
     if _model is None:
         _model = joblib.load(settings.MODEL_PATH)
-    meta_path = settings.MODEL_PATH.replace(".joblib", "_meta.json").replace("interaction_model", "model")
     meta_file = os.path.join(os.path.dirname(settings.MODEL_PATH), "model_meta.json")
     if _meta is None and os.path.exists(meta_file):
         with open(meta_file, encoding="utf-8") as f:
@@ -196,10 +194,6 @@ def run_interaction_check(self, check_id: int):
             reverse=True,
         )
 
-        user = db.execute(
-            sync_select(User).where(User.id == check.user_id)
-        ).scalar_one()
-
         new_balance = sync_deduct_credits(
             db, check.user_id, check_id, check.cost,
             description=f"Проверка взаимодействий: {', '.join(drugs[:3])}{'...' if len(drugs) > 3 else ''}",
@@ -213,17 +207,19 @@ def run_interaction_check(self, check_id: int):
 
     except Exception as exc:
         db.rollback()
-        try:
-            from sqlalchemy import select as sync_select
-            check = db.execute(
-                sync_select(InteractionCheck).where(InteractionCheck.id == check_id)
-            ).scalar_one_or_none()
-            if check:
-                check.status = "failed"
-                check.error_message = str(exc)
-                db.commit()
-        except Exception:
-            pass
+        is_last_attempt = self.request.retries >= self.max_retries
+        if is_last_attempt:
+            try:
+                from sqlalchemy import select as sync_select
+                check = db.execute(
+                    sync_select(InteractionCheck).where(InteractionCheck.id == check_id)
+                ).scalar_one_or_none()
+                if check:
+                    check.status = "failed"
+                    check.error_message = str(exc)
+                    db.commit()
+            except Exception:
+                pass
 
         raise self.retry(exc=exc)
     finally:

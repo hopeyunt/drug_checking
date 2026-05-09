@@ -10,7 +10,7 @@ from app.models.user import User, LoyaltyConfig
 from app.models.transaction import Transaction
 
 
-# TODO: потом брать из БД, пока хардкод
+# Fallback-значения на случай пустой таблицы LoyaltyConfig в БД
 _DEFAULT_CONFIGS = {
     "bronze": {"min_predictions": 0, "discount_percent": Decimal("0")},
     "silver": {"min_predictions": 50, "discount_percent": Decimal("5")},

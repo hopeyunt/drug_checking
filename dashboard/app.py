@@ -196,7 +196,6 @@ if page == "📊 Главная":
 
     st.divider()
 
-    # TODO: вынести пороги в константы
     current = balance_data.get("monthly_checks", 0)
     current_level = balance_data.get("loyalty_level", "bronze")
     if current_level == "bronze":
